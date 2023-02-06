@@ -3,16 +3,16 @@ import jwt from "jsonwebtoken";
 import fetch from "node-fetch";
 
 const app = express();
-const port = process.env.PORT || 3000;
+const port = process.env.PORT || 3001;
 
 const {
-  OAUTH_CLIENT_ID,
-  OAUTH_CLIENT_SECRET,
-  OAUTH_AUTHORIZATION_ENDPOINT,
-  OAUTH_TOKEN_ENDPOINT,
-  OAUTH_REDIRECT_URI,
-  GITBOOK_DOCUMENTATION_URL,
-  GITBOOK_SIGNING_SECRET,
+  OAUTH_CLIENT_ID="gitbook",
+  OAUTH_CLIENT_SECRET="changeit",
+  OAUTH_AUTHORIZATION_ENDPOINT="https://changeit/auth/realms/gazelle/protocol/openid-connect/auth",
+  OAUTH_TOKEN_ENDPOINT="https://changeit/auth/realms/gazelle/protocol/openid-connect/token",
+  OAUTH_REDIRECT_URI="https://changeit/gitbook-auth/oauth-verification",
+  GITBOOK_DOCUMENTATION_URL="https://changeit/internal-documentation/",
+  GITBOOK_SIGNING_SECRET="changeit",
 } = process.env;
 
 /*
@@ -30,7 +30,7 @@ app.get("/gitbook-visitor-auth-endpoint", (req, res) => {
   const authParameters = {
     client_id: OAUTH_CLIENT_ID,
     response_type: "code",
-    redirect_uri: OAUTH_REDIRECT_URI,
+    redirect_uri: `${OAUTH_REDIRECT_URI}?location=${req.query.location}`
     // state
   };
   const outboundRedirectURI = `${OAUTH_AUTHORIZATION_ENDPOINT}?${new URLSearchParams(
@@ -51,10 +51,11 @@ app.get("/oauth-verification", async (req, res) => {
       `The visitor likely rejected permission in our oauth provider's dialog`
     );
     // You could return your own error page here if you like.
-    res.status("401");
+    res.status(401);
     res.send("Forbidden");
   } else {
-    const isValidCode = await verifyCode(req.query["code"]);
+    const locationRequest = req.query.location;
+    const isValidCode = await verifyCode(req.query["code"],locationRequest);
     if (!isValidCode) {
       console.log("Could not exchange oauth code for oauth access token");
       res.status("401");
@@ -66,7 +67,7 @@ app.get("/oauth-verification", async (req, res) => {
       jwt_token: signedJWT,
     };
     res.redirect(
-      `${GITBOOK_DOCUMENTATION_URL}?${new URLSearchParams(
+      `${GITBOOK_DOCUMENTATION_URL}${locationRequest}?${new URLSearchParams(
         gitBookRedirectParams
       ).toString()}`
     );
@@ -79,7 +80,7 @@ app.get("/oauth-verification", async (req, res) => {
  * This step is known as "Access Token Request" in the OAuth 2.0 spec
  * (IETF RFC 6749)
  */
-async function verifyCode(code) {
+async function verifyCode(code,locationRequest) {
   const tokenVerificationResponse = await fetch(OAUTH_TOKEN_ENDPOINT, {
     headers: {
       "content-type": "application/x-www-form-urlencoded",
@@ -95,7 +96,8 @@ async function verifyCode(code) {
       client_id: OAUTH_CLIENT_ID,
       client_secret: OAUTH_CLIENT_SECRET,
       code,
-      redirect_uri: OAUTH_REDIRECT_URI,
+      redirect_uri: `${OAUTH_REDIRECT_URI}?location=${locationRequest}`,
+      // redirect_uri: OAUTH_REDIRECT_URI,
     }).toString(),
   });
 
@@ -106,6 +108,7 @@ async function verifyCode(code) {
 
 app.listen(port, () => {
   console.log(
-    `GitBook Visitor Auth Demo app listening at http://localhost:${port}`
+    `GitBook Visitor Auth Demo app listening at http://localhost:${port}/gitbook-visitor-auth-endpoint`
   );
 });
+
